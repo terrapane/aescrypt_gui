@@ -1,6 +1,6 @@
 # Change Log
 
-4.4.1 (In progress)
+4.5.0
 
 - Changed cpack dependencies for newer RPMs
 - Minor CMake changes
