@@ -1,5 +1,11 @@
 # Change Log
 
+4.6.0 (in progress)
+
+- Minor edits to installation data
+- CMake configuration changes
+- Introduced metainfo.xml file
+
 4.5.0
 
 - Changed cpack dependencies for newer RPMs

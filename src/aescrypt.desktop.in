@@ -2,7 +2,7 @@
 Type=Application
 Version=1.0
 Name=AES Crypt
-Comment=Encrypt or Decrypt files using AES Crypt
+Comment=AES Crypt file encryption utility
 Icon=aescrypt_lock
 Exec=@INSTALL_PATH@/bin/aescrypt-gui %F
 Terminal=false
