@@ -11,8 +11,17 @@
                 <match type="byte" offset="3" value="0">
                     <match type="byte" offset="4" mask="0xf0" value="0"/>
                 </match>
-                <match type="byte" offset="3" mask="0xff" value="1" type_mask="0x00">
-                    <match type="byte" offset="4" value="0"/>
+            </match>
+            <match type="string" offset="0" value="AES">
+                <match type="byte" offset="4" value="0">
+                    <match type="byte" offset="3" mask="0x01" value="0x01"/>
+                    <match type="byte" offset="3" mask="0x02" value="0x02"/>
+                    <match type="byte" offset="3" mask="0x04" value="0x04"/>
+                    <match type="byte" offset="3" mask="0x08" value="0x08"/>
+                    <match type="byte" offset="3" mask="0x10" value="0x10"/>
+                    <match type="byte" offset="3" mask="0x20" value="0x20"/>
+                    <match type="byte" offset="3" mask="0x40" value="0x40"/>
+                    <match type="byte" offset="3" mask="0x80" value="0x80"/>
                 </match>
             </match>
         </magic>
