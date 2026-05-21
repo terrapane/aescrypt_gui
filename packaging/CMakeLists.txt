@@ -38,7 +38,7 @@ if(aescrypt_gui_INSTALL AND (UNIX AND NOT APPLE))
     endif()
     include(CPack)
 
-    # Create the metainfo file and instal it
+    # Create the metainfo file and install it
     file(READ "${CMAKE_CURRENT_SOURCE_DIR}/description.txt" DESCRIPTION_TEXT)
     string(REPLACE ";" "\\;" DESCRIPTION_TEXT "${DESCRIPTION_TEXT}")
     string(REGEX REPLACE "\n$" "" DESCRIPTION_TEXT "${DESCRIPTION_TEXT}")
