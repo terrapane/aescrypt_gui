@@ -1,5 +1,6 @@
 # This file facilitates creation of package files for OS installation
 if(aescrypt_gui_INSTALL AND (UNIX AND NOT APPLE))
+    include(GNUInstallDirs)
     include(InstallRequiredSystemLibraries)
     set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
     set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "AES Crypt GUI")
