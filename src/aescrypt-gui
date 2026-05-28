@@ -13,7 +13,7 @@
 use strict;
 
 # Check to see if the specified application is available
-sub IsAvailable($)
+sub IsAvailable
 {
     my ($application) = @_;
 
@@ -26,28 +26,63 @@ sub IsAvailable($)
     return (system("which $application >/dev/null 2>&1") == 0);
 }
 
-# This function will perform the requested operation, returning the result
-# and the outout from stderr
-sub PerformAction(@)
+# Escape the given array of parameters for command-line use
+sub EscapeParameterArray
 {
-    my ($capture_stderr, @parameters) = @_;
-    my $output;
+    my (@parameters) = @_;
 
     # Escape each of the parameters
-    for (my $i = 0; $i <= $#parameters; $i++)
+    foreach my $parameter (@parameters)
     {
-        # Copy the parameter
-        my $parameter = $parameters[$i];
-
         # Escape single quote characters
         $parameter =~ s/'/'\\\''/g;
 
         # Put single quotes around the parameter
         $parameter = "'$parameter'";
-
-        # Put the parameter back in the array
-        $parameters[$i] = $parameter;
     }
+
+    return @parameters;
+}
+
+# This function will perform an action that involves a series pipes, taking
+# array references of commands and arguments after the initial scalar
+sub PerformPipedActions
+{
+    my ($capture_stderr, @parameters) = @_;
+    my $output;
+    my $command;
+
+    # Escape each of the array references
+    for (my $i = 0; $i <= $#parameters; $i++)
+    {
+        my @escaped = EscapeParameterArray(@{$parameters[$i]});
+        $command .= " | " if (length($command) > 0);
+        $command .= join(' ', @escaped);
+    }
+
+    if ($capture_stderr)
+    {
+        $output = qx($command 2>&1);
+    }
+    else
+    {
+        $output = qx($command);
+    }
+    chomp($output);
+    my $result = $?;
+
+    return ($result, $output);
+}
+
+# This function will perform the requested operation, returning the result
+# and the outout from stderr
+sub PerformAction
+{
+    my ($capture_stderr, @parameters) = @_;
+    my $output;
+
+    # Escape each of the parameters
+    @parameters = EscapeParameterArray(@parameters);
 
     if ($capture_stderr)
     {
@@ -64,7 +99,7 @@ sub PerformAction(@)
 }
 
 # Find a UTF-8 variant of a language or fallback to C.utf8
-sub FindUTF8Locale($)
+sub FindUTF8Locale
 {
     my ($language) = @_;
     my @candidates = ("$language.UTF-8", "$language.utf8", "C.UTF-8", "C.utf8");
@@ -83,7 +118,7 @@ sub FindUTF8Locale($)
 }
 
 # Ensure the user's locale is correct and set it if it not
-sub CheckAndSetLocale()
+sub CheckAndSetLocale
 {
     # Get current locale
     my $locale = $ENV{LC_ALL} || $ENV{LC_CTYPE} || $ENV{LANG} || '';
