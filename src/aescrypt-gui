@@ -165,7 +165,7 @@ sub CheckProgressWindowCancelled
 
     my $is_cancelled = 0;
 
-    return $is_cancelled if (!$dialog_pid);
+    return $is_cancelled if (!defined $dialog_pid || $dialog_pid <= 0);
 
     if ($dialog_type eq "zenity")
     {
