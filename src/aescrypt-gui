@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 #
 # aescrypt-gui
-# Copyright (C) 2025
+# Copyright (C) 2025, 2026
 # Terrapane Corporation
 #
 # This script launches the AES Crypt binary to encrypt files when directed
@@ -11,6 +11,9 @@
 #
 
 use strict;
+use IPC::Open3;
+use Symbol "gensym";
+use POSIX qw(:sys_wait_h);
 
 # Check to see if the specified application is available
 sub IsAvailable
@@ -24,6 +27,47 @@ sub IsAvailable
     }
 
     return (system("which $application >/dev/null 2>&1") == 0);
+}
+
+# This function will perform the requested operation, returning the result
+# and the outout from STDERR, as requested
+sub PerformActionWithStdin
+{
+    my ($input_text, @parameters) = @_;
+    my ($pid, $input_fd, $output_fd, $error_fd);
+
+    # # Generate a valid, empty symbol reference for STDERR
+    my $error_fd = gensym();
+
+    # Attempt to invoke command
+    eval { $pid = open3($input_fd, $output_fd, $error_fd, @parameters); };
+
+    if ($@ || !$pid)
+    {
+        return (-1, "Failed to perform requested task: $@");
+    }
+
+    # If there was an error, return
+    if (!$pid)
+    {
+        return (-1, "Failed to perform requested task");
+    }
+
+    # Emit text to stdin
+    print $input_fd $input_text;
+    close($input_fd);
+
+    # Capture output content
+    my $stdout_captured = do { local $/; <$output_fd> };
+    my $stderr_captured = do { local $/; <$error_fd> };
+
+    # Close file descriptors and wait for child process to complete
+    close($output_fd);
+    close($error_fd);
+    waitpid($pid, 0);
+    my $exit_code = $? >> 8;
+
+    return ($exit_code, $stdout_captured, $stderr_captured);
 }
 
 # Escape the given array of parameters for command-line use
@@ -44,38 +88,8 @@ sub EscapeParameterArray
     return @parameters;
 }
 
-# This function will perform an action that involves a series pipes, taking
-# array references of commands and arguments after the initial scalar
-sub PerformPipedActions
-{
-    my ($capture_stderr, @parameters) = @_;
-    my $output;
-    my $command;
-
-    # Escape each of the array references
-    for (my $i = 0; $i <= $#parameters; $i++)
-    {
-        my @escaped = EscapeParameterArray(@{$parameters[$i]});
-        $command .= " | " if (length($command) > 0);
-        $command .= join(' ', @escaped);
-    }
-
-    if ($capture_stderr)
-    {
-        $output = qx($command 2>&1);
-    }
-    else
-    {
-        $output = qx($command);
-    }
-    chomp($output);
-    my $result = $?;
-
-    return ($result, $output);
-}
-
 # This function will perform the requested operation, returning the result
-# and the outout from stderr
+# and the outout from STDERR
 sub PerformAction
 {
     my ($capture_stderr, @parameters) = @_;
@@ -96,6 +110,109 @@ sub PerformAction
     my $result = $?;
 
     return ($result, $output);
+}
+
+# Routine to open the progress dialog window
+sub OpenProgressWindow
+{
+    my ($dialog_type, @progress_dialog) = @_;
+
+    my ($dialog_fh, $dialog_pid);
+
+    # Behavior differs by dialog type
+    if ($dialog_type eq "zenity")
+    {
+        # Launch a Zenity progress window
+        $dialog_pid = open($dialog_fh, "|-", @progress_dialog);
+        if (!$dialog_pid)
+        {
+            return (undef, undef);
+        }
+    }
+    else
+    {
+        # Since kdialog forks, we need to capture the child process
+
+        # kdialog opens as a read-pipe (-|) so we can capture its output
+        my $launcher_pid = open($dialog_fh, '-|', @progress_dialog);
+        if (!$launcher_pid)
+        {
+            return (undef, undef);
+        }
+
+        # Read the D-Bus reference string ("org.kde.kdialog-12345 /ProgressDialog")
+        my $dbus_output = <$dialog_fh>;
+
+        # Parse the real GUI window PID right out of the string
+        if ($dbus_output && $dbus_output =~ /kdialog-(\d+)/)
+        {
+            $dialog_pid = $1;
+        }
+        else
+        {
+            # Fallback to the launcher PID if parsing fails
+            $dialog_pid = $launcher_pid;
+        }
+    }
+
+    return ($dialog_fh, $dialog_pid);
+}
+
+# Check the progress window for cancellation
+sub CheckProgressWindowCancelled
+{
+    my ($dialog_type, $dialog_pid) = @_;
+
+    my $is_cancelled = 0;
+
+    return $is_cancelled if (!$dialog_pid);
+
+    if ($dialog_type eq "zenity")
+    {
+        # Check to see if we can wait on the PID
+        my $check_pid = waitpid($dialog_pid, WNOHANG);
+        $is_cancelled = 1 if ($check_pid == $dialog_pid);
+    }
+    else
+    {
+        # Check to see if PID is still valid
+        my $is_alive = kill(0, $dialog_pid);
+        $is_cancelled = 1 if !$is_alive;
+    }
+
+    return $is_cancelled;
+}
+
+# Close the progress dialog
+sub CloseProgressWindow
+{
+    my ($dialog_type, $dialog_fh, $dialog_pid_ref) = @_;
+
+    # Dereference the PID
+    my $dialog_pid = $$dialog_pid_ref;
+    return unless $dialog_pid;
+
+    # Close the progress dialog
+    if ($dialog_pid) {
+
+        if ($dialog_type eq "kdialog")
+        {
+            # kdialog requires explicitly telling it via D-Bus to close, but a
+            # standard TERM signal is the will close it cleanly
+            my $killed = kill("TERM", $dialog_pid);
+        }
+        else
+        {
+            # Zenity with "--auto-close" will close automatically when STDIN closes
+            close($dialog_fh);
+        }
+
+        # Wait for the progress dialog window to close
+        waitpid($dialog_pid, 0);
+    }
+
+    # Ensure caller knows the process was terminated
+    $$dialog_pid_ref = undef;
 }
 
 # Find a UTF-8 variant of a language or fallback to C.utf8
@@ -121,7 +238,7 @@ sub FindUTF8Locale
 sub CheckAndSetLocale
 {
     # Get current locale
-    my $locale = $ENV{LC_ALL} || $ENV{LC_CTYPE} || $ENV{LANG} || '';
+    my $locale = $ENV{LC_ALL} || $ENV{LC_CTYPE} || $ENV{LANG} || "";
 
     # Check if locale is already UTF-8
     return (0, "") if ($locale =~ /UTF-?8/i);
@@ -151,17 +268,17 @@ sub CheckAndSetLocale
 my $desktop = $ENV{"XDG_CURRENT_DESKTOP"};
 
 # If desktop is KDE, use kdialog; else use zenity
-my $dialog = ($desktop eq "KDE") ? "kdialog" : "zenity";
+my $dialog_type = ($desktop eq "KDE") ? "kdialog" : "zenity";
 my $alternate_dialog = ($desktop eq "KDE") ? "zenity" : "kdialog";
 
 # If the preferred dialog is not available, check the alternate
-if (!IsAvailable($dialog))
+if (!IsAvailable($dialog_type))
 {
     # Attempt to use the alternative dialog application
-    $dialog = $alternate_dialog;
+    $dialog_type = $alternate_dialog;
 
     # If the alternate is not available, report an error and exit
-    if (!IsAvailable($dialog))
+    if (!IsAvailable($dialog_type))
     {
         print STDERR "Neither zenity nor kdialog is installed\n";
         exit(-1);
@@ -175,13 +292,15 @@ my @password_prompt;
 my @password_prompt_verify;
 my @error_message;
 my @info_message;
-if ($dialog eq "kdialog")
+my @progress_dialog;
+if ($dialog_type eq "kdialog")
 {
     @file_selection = ("kdialog", "--getopenfilename", "", "*", "--multiple", "--separate-output", "--title", "AES Crypt (Select Files to Encrypt or Decrypt)");
     @password_prompt = ("kdialog", "--title", "AES Crypt", "--password", "Enter password");
     @password_prompt_verify = ("kdialog", "--title", "AES Crypt (Verify)", "--password", "Enter password");
     @error_message = ("kdialog", "--title", "AES Crypt", "--error");
     @info_message = ("kdialog", "--title", "AES Crypt", "--msgbox");
+    @progress_dialog = ("kdialog", "--title", "AES Crypt", "--progressbar", "Working, please wait...", 0);
 }
 else
 {
@@ -190,6 +309,7 @@ else
     @password_prompt_verify = ("zenity", "--title", "AES Crypt (Verify)", "--password");
     @error_message = ("zenity", "--title", "AES Crypt", "--width", "350", "--error", "--text");
     @info_message = ("zenity", "--title", "AES Crypt", "--width", "350", "--info", "--text");
+    @progress_dialog = ("zenity", "--progress",  "--title", "AES Crypt", "--text=Working, please wait...", "--pulsate", "--auto-close");
 }
 
 # Ensure user's locale is set to one that uses UTF-8
@@ -299,24 +419,44 @@ if ($mode eq "e")
     }
 }
 
+# Display the progress dialog
+my ($dialog_fh, $dialog_pid) = OpenProgressWindow($dialog_type, @progress_dialog);
+my $cancel_detected = 0;
+
 # Iterate over each file to perform encryption
 foreach my $file (@input_files)
 {
     # Encrypt or decrypt the file
-    my ($aes_result, $output) = PerformAction(1, "aescrypt", "-q", "-$mode", "-p", "$password", "$file");
+    my ($aes_result, $output, $error_output) =
+        PerformActionWithStdin($password, "aescrypt", "-q", "-$mode", "-k", "-", "$file");
     if ($aes_result)
     {
-        PerformAction(0, @error_message, "$output");
+        CloseProgressWindow($dialog_type, $dialog_fh, \$dialog_pid);
+        PerformAction(0, @error_message, "$error_output");
         exit(-1);
+    }
+
+    # Check to see if user cancelled
+    if (CheckProgressWindowCancelled($dialog_type, $dialog_pid))
+    {
+        $cancel_detected = 1;
+        last;
     }
 }
 
-# Indicate that encryption succeeded
-if ($mode eq "e")
+# Close the progress dialog (if open)
+CloseProgressWindow($dialog_type, $dialog_fh, \$dialog_pid);
+
+# If the user cancelled, do not proclaim success
+if (!$cancel_detected)
 {
-    PerformAction(0, @info_message, "File encryption completed successfully");
-}
-else
-{
-    PerformAction(0, @info_message, "File decryption completed successfully");
+    # Indicate that encryption succeeded
+    if ($mode eq "e")
+    {
+        PerformAction(0, @info_message, "File encryption completed successfully");
+    }
+    else
+    {
+        PerformAction(0, @info_message, "File decryption completed successfully");
+    }
 }
