@@ -421,7 +421,7 @@ if ($mode eq "e")
 
 # Display the progress dialog
 my ($dialog_fh, $dialog_pid) = OpenProgressWindow($dialog_type, @progress_dialog);
-my $cancel_detected = 0;
+my $user_cancelled = 0;
 
 # Iterate over each file to perform encryption
 foreach my $file (@input_files)
@@ -439,7 +439,7 @@ foreach my $file (@input_files)
     # Check to see if user cancelled
     if (CheckProgressWindowCancelled($dialog_type, $dialog_pid))
     {
-        $cancel_detected = 1;
+        $user_cancelled = 1;
         last;
     }
 }
@@ -448,7 +448,7 @@ foreach my $file (@input_files)
 CloseProgressWindow($dialog_type, $dialog_fh, \$dialog_pid);
 
 # If the user cancelled, do not proclaim success
-if (!$cancel_detected)
+if (!$user_cancelled)
 {
     # Indicate that encryption succeeded
     if ($mode eq "e")
