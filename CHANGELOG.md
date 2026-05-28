@@ -4,6 +4,7 @@
 
 - Minor edits to installation data
 - CMake configuration changes
+- Added a progress dialog
 - Introduced metainfo.xml file
 
 4.5.0
