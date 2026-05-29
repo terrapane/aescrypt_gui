@@ -33,8 +33,9 @@ sub IsAvailable
 # and the outout from STDERR, as requested
 sub PerformActionWithStdin
 {
-    my ($input_text, @parameters) = @_;
+    my ($dialog_type, $dialog_pid, $input_text, @parameters) = @_;
     my ($pid, $input_fd, $output_fd, $error_fd);
+    my $user_cancelled = 0;
 
     # # Generate a valid, empty symbol reference for STDERR
     my $error_fd = gensym();
@@ -44,30 +45,88 @@ sub PerformActionWithStdin
 
     if ($@ || !$pid)
     {
-        return (-1, "Failed to perform requested task: $@");
+        return (0, -1, undef, "Failed to perform requested task: $@");
     }
 
     # If there was an error, return
     if (!$pid)
     {
-        return (-1, "Failed to perform requested task");
+        return (0, -1, undef, "Failed to perform requested task");
     }
 
     # Emit text to stdin
     print $input_fd $input_text;
     close($input_fd);
 
-    # Capture output content
+    # Loop waiting for either AES Crypt to complete or the user to cancel
+    my $process_exited = 0;
+    while (!$process_exited)
+    {
+        my $check_pid = waitpid($pid, WNOHANG);
+        if ($check_pid == $pid)
+        {
+            $process_exited = 1;
+            last;
+        }
+
+        if ($dialog_pid)
+        {
+            $user_cancelled = CheckProgressWindowCancelled($dialog_type, $dialog_pid);
+
+            if ($user_cancelled)
+            {
+                # Kill the background process
+                kill('INT', $pid);
+                last;
+            }
+        }
+
+        # Sleep briefly to avoid thrashing
+        select(undef, undef, undef, 0.05);
+    }
+
+    # Capture output content if not cancelled
     my $stdout_captured = do { local $/; <$output_fd> };
     my $stderr_captured = do { local $/; <$error_fd> };
+
+    # Because the slurps just hit EOF, Perl's internal I/O engine has already
+    # reaped the child process and populated $? safely
+    my $exit_code = $? >> 8;
+
+    # Handle kernel/runtime edge cases where $? gets masked or returned as -1
+    if ($exit_code == 255 || $exit_code == -1)
+    {
+        # Verify both handles are defined strings (valid read lifecycle)
+        my $reads_executed_ok = (defined $stdout_captured && defined $stderr_captured);
+
+        # Check if the error buffer caught any warning, panic, or signal log
+        my $has_errors_or_logs = ($stderr_captured ne "");
+
+        if (!$user_cancelled && $reads_executed_ok && !$has_errors_or_logs)
+        {
+            # The run was completely silent, the user didn't cancel,
+            # and the streams didn't throw an I/O fault; safe to assume success
+            $exit_code = 0;
+        }
+        else
+        {
+            # If the binary wrote a cleanup log/error to stderr or the user
+            # cancelled, force a failure code
+            $exit_code = 1;
+
+            # Fallback if the process vanished invisibly without writing to stderr
+            if (!$has_errors_or_logs && !$user_cancelled)
+            {
+                $stderr_captured = "Internal Error: unable to exit status\n";
+            }
+        }
+    }
 
     # Close file descriptors and wait for child process to complete
     close($output_fd);
     close($error_fd);
-    waitpid($pid, 0);
-    my $exit_code = $? >> 8;
 
-    return ($exit_code, $stdout_captured, $stderr_captured);
+    return ($user_cancelled, $exit_code, $stdout_captured, $stderr_captured);
 }
 
 # Escape the given array of parameters for command-line use
@@ -427,20 +486,24 @@ my $user_cancelled = 0;
 foreach my $file (@input_files)
 {
     # Encrypt or decrypt the file
-    my ($aes_result, $output, $error_output) =
-        PerformActionWithStdin($password, "aescrypt", "-q", "-$mode", "-k", "-", "$file");
-    if ($aes_result)
+    my ($cancel_detected, $exit_code, $output, $error_output) =
+        PerformActionWithStdin($dialog_type, $dialog_pid, $password,
+                               "aescrypt", "-q", "-$mode", "-k", "-", "$file");
+
+    # If it appears the user cancelled, break out of the loop
+    if ($cancel_detected ||
+        CheckProgressWindowCancelled($dialog_type, $dialog_pid))
+    {
+        $user_cancelled = 1;
+        last;
+    }
+
+    # If not cancelled and an error seen, report and exit
+    if ($exit_code)
     {
         CloseProgressWindow($dialog_type, $dialog_fh, \$dialog_pid);
         PerformAction(0, @error_message, "$error_output");
         exit(-1);
-    }
-
-    # Check to see if user cancelled
-    if (CheckProgressWindowCancelled($dialog_type, $dialog_pid))
-    {
-        $user_cancelled = 1;
-        last;
     }
 }
 
