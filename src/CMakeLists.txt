@@ -1,7 +1,11 @@
 # Depending on the platform, the aescrypt binary is expected to be in /usr/bin
 # or /usr/local/bin, so set the aescrypt.desktop file accordingly
 if(BSD OR APPLE)
-    set(INSTALL_PATH "/usr/local")
+    if(CMAKE_SYSTEM_NAME STREQUAL "NetBSD")
+        set(INSTALL_PATH "/usr/pkg")
+    elseif(BSD)
+        set(INSTALL_PATH "/usr/local")
+    endif()
 else()
     set(INSTALL_PATH "/usr")
 endif()
