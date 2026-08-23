@@ -1,6 +1,10 @@
 # Change Log
 
-4.6.0 (in progress)
+4.7.0
+
+- Updated AES Crypt CLI dependency
+
+4.6.0
 
 - Minor edits to installation data
 - CMake configuration changes
