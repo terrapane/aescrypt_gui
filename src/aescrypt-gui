@@ -354,7 +354,7 @@ my @info_message;
 my @progress_dialog;
 if ($dialog_type eq "kdialog")
 {
-    @file_selection = ("kdialog", "--getopenfilename", "", "*", "--multiple", "--separate-output", "--title", "AES Crypt (Select Files to Encrypt or Decrypt)");
+    @file_selection = ("kdialog", "--getopenfilename", "", "*", "--multiple", "--separate-output", "--title", "AES Crypt - Select File(s) to Encrypt or Decrypt");
     @password_prompt = ("kdialog", "--title", "AES Crypt", "--password", "Enter password");
     @password_prompt_verify = ("kdialog", "--title", "AES Crypt (Verify)", "--password", "Enter password");
     @error_message = ("kdialog", "--title", "AES Crypt", "--error");
@@ -363,7 +363,7 @@ if ($dialog_type eq "kdialog")
 }
 else
 {
-    @file_selection = ("zenity", "--file-selection", "--multiple", "--separator=\n", "--title", "AES Crypt (Select Files to Encrypt or Decrypt)");
+    @file_selection = ("zenity", "--file-selection", "--multiple", "--separator=\n", "--title", "AES Crypt - Select File(s) to Encrypt or Decrypt)");
     @password_prompt = ("zenity", "--title", "AES Crypt", "--password");
     @password_prompt_verify = ("zenity", "--title", "AES Crypt (Verify)", "--password");
     @error_message = ("zenity", "--title", "AES Crypt", "--width", "350", "--error", "--text");
