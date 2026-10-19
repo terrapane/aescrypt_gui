@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
-    <mime-type type="application/aescrypt">
+    <mime-type type="application/aes">
         <comment>AES Crypt document</comment>
         <acronym>AES Crypt</acronym>
         <generic-icon name="aescrypt_paper"/>
         <glob pattern="*.aes"/>
         <alias type="application/aes"/>
+        <alias type="application/aescrypt"/>
+        <alias type="application/x-aes"/>
         <magic priority="50">
             <match type="string" offset="0" value="AES">
                 <match type="byte" offset="3" value="0">

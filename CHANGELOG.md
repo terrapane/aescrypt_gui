@@ -1,5 +1,9 @@
 # Change Log
 
+4.7.0.1
+
+- Minor modifications to GUI installation to ensure proper file association
+
 4.7.0
 
 - Updated AES Crypt CLI dependency

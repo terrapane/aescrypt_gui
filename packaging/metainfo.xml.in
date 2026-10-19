@@ -22,8 +22,11 @@
   <provides>
     <binary>aescrypt</binary>
     <binary>aescrypt-gui</binary>
-    <mediatype>application/aescrypt</mediatype>
     <mediatype>application/aes</mediatype>
+    <mediatype>application/aescrypt</mediatype>
+    <mediatype>application/x-aes</mediatype>
+    <mediatype>application/octet-stream</mediatype>
+    <mediatype>text/plain</mediatype>
   </provides>
   <url type="homepage">https://www.aescrypt.com/</url>
   <url type="contact">https://www.aescrypt.com/contact/</url>
